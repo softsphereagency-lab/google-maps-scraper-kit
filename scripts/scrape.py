@@ -18,6 +18,12 @@ Notes:
 import argparse, csv, io, json, os, re, sys, time, urllib.request, urllib.parse, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
 BASE = os.environ.get("SCRAPER_BASE_URL", "http://localhost:8080")
 KEY = os.environ.get("SCRAPER_API_KEY", "")
 # Money-useful LEAD fields only — what you actually use to contact/qualify a lead.
@@ -58,7 +64,7 @@ def collect_keywords(a):
         kws.append(a.keyword)
     kws.extend(a.also or [])
     if a.keywords_file:
-        with open(a.keywords_file) as f:
+        with open(a.keywords_file, encoding="utf-8") as f:
             kws.extend(line.strip() for line in f if line.strip() and not line.startswith("#"))
     # de-dupe, keep order
     seen, out = set(), []
@@ -231,10 +237,10 @@ def main():
     as_json = a.json or (a.out and a.out.lower().endswith(".json"))
     out = a.out or f"results-{job_id[:8]}.{'json' if as_json else 'csv'}"
     if as_json:
-        with open(out, "w") as f:
+        with open(out, "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
     else:
-        with open(out, "w", newline="") as f:
+        with open(out, "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=fields)
             w.writeheader()
             w.writerows(results)
