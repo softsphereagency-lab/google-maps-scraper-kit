@@ -1070,7 +1070,7 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 		defaultCRM := os.Getenv("CRM_BASE_URL")
 		if defaultCRM == "" {
-			defaultCRM = "https://softsphere-agency-crm.vercel.app"
+			defaultCRM = "https://softsphere-agency-crm-ten.vercel.app"
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1101,7 +1101,7 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 			targetCRM = os.Getenv("CRM_BASE_URL")
 		}
 		if targetCRM == "" {
-			targetCRM = "https://softsphere-agency-crm.vercel.app"
+			targetCRM = "https://softsphere-agency-crm-ten.vercel.app"
 		}
 		targetCRM = strings.TrimRight(targetCRM, "/")
 
@@ -1126,9 +1126,16 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		defer resp.Body.Close()
 
+		respBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			renderJSON(w, http.StatusBadGateway, map[string]string{"error": "Failed to read CRM response"})
+			return
+		}
+
 		var crmResp crmLoginResponse
-		if err := json.NewDecoder(resp.Body).Decode(&crmResp); err != nil {
-			renderJSON(w, http.StatusBadGateway, map[string]string{"error": "CRM returned invalid response"})
+		if err := json.Unmarshal(respBytes, &crmResp); err != nil {
+			log.Printf("[CRM Auth Error] status %d, response: %s", resp.StatusCode, string(respBytes))
+			renderJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("CRM connection error (%d)", resp.StatusCode)})
 			return
 		}
 
