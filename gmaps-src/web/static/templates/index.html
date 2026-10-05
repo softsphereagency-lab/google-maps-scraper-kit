@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Maps Scraper</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/1.9.6/htmx.min.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDNe1Kfvz9anSukuwFpTriZM04ySWEXteE&libraries=places&callback=initPlaceAutocomplete" async defer></script>
+    <style>
+        .pac-container {
+            z-index: 100000 !important;
+            border-radius: 8px !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+            border: 1px solid #cbd5e1 !important;
+            margin-top: 4px !important;
+            background-color: #ffffff !important;
+        }
+        .pac-item {
+            padding: 8px 12px !important;
+            font-size: 13px !important;
+            cursor: pointer !important;
+            line-height: 1.4 !important;
+            border-top: 1px solid #f1f5f9 !important;
+        }
+        .pac-item:first-child {
+            border-top: none !important;
+        }
+        .pac-item:hover, .pac-item-selected {
+            background-color: #eff6ff !important;
+        }
+        .pac-item-query {
+            font-size: 13px !important;
+            color: #0f172a !important;
+            font-weight: 600 !important;
+            padding-right: 4px !important;
+        }
+        .pac-matched {
+            font-weight: 700 !important;
+            color: #2563eb !important;
+        }
+        .pac-icon {
+            margin-top: 3px !important;
+        }
+        .location-search-box {
+            position: relative;
+            background: #f8fafc;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 12px;
+        }
+        .location-search-input {
+            width: 100%;
+            padding: 8px 10px;
+            font-size: 13px;
+            border: 1.5px solid #3b82f6;
+            border-radius: 6px;
+            outline: none;
+            box-sizing: border-box;
+            background: #ffffff;
+            transition: all 0.2s;
+        }
+        .location-search-input:focus {
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+            border-color: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="header-container">
+                <div class="logo-group">
+                    <svg class="header-icon" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <h1>Google Maps Scraper</h1>
+                </div>
+                <div class="header-badge">
+                    <span class="status-dot"></span>
+                    <span>Ready</span>
+                </div>
+            </div>
+
+
+        </header>
+        <main>
+            <div class="sidebar">
+                <div id="error-container" class="error-message"></div>
+                <form 
+                    hx-post="/scrape" 
+                    hx-target="#job-tbody"
+                    hx-swap="outerHTML"
+                    hx-indicator="#spinner"
+                    hx-on::before-request="document.getElementById('error-container').innerHTML = ''"
+                    hx-on::after-request="if(!event.detail.successful) document.getElementById('error-container').innerHTML = event.detail.xhr.responseText"
+                >
+                    
+                    <fieldset>
+                        <legend>Job Details</legend>
+                        <div class="form-group">
+                            <label for="name">Job Name:</label>
+                            <input type="text" id="name" name="name" value="{{.Name}}">
+                        </div>
+                        <div class="form-group">
+                            <label for="keywords">Keywords:</label>
+                            <textarea id="keywords" name="keywords" rows="10">{{ .KeywordsString }}</textarea>
+                        </div>
+                        <input type="hidden" name="lang" value="en">
+                        <input type="hidden" name="email" value="on">
+                    </fieldset>
+                    
+                    <details class="expandable-section" id="location-settings-section" open>
+                        <summary>Location Settings & Places Search</summary>
+                        <fieldset>
+                            <div class="location-search-box" style="position: relative;">
+                                <label for="place_search" style="font-weight: 600; font-size: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                    <span>🔍 Search City, Area, or Landmark:</span>
+                                    <span id="geo-status" style="font-size: 11px; color: #10b981; font-weight: 600; display: none;">✓ Auto-filled</span>
+                                </label>
+                                <div style="display: flex; gap: 6px; position: relative;">
+                                    <input 
+                                        type="text" 
+                                        id="place_search" 
+                                        class="location-search-input"
+                                        placeholder="Type city or area (e.g. Doha, West Bay, Dubai, London...)" 
+                                        autocomplete="off"
+                                    >
+                                    <button 
+                                        type="button" 
+                                        id="btn-geocode" 
+                                        onclick="manualGeocode()" 
+                                        title="Lookup coordinates"
+                                        style="background: #2563eb; color: #fff; border: none; padding: 0 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; height: 35px;"
+                                    >
+                                        Find
+                                    </button>
+                                </div>
+                                <div id="place-dropdown-results" style="display:none; position: absolute; left: 10px; right: 10px; z-index: 100000; background: #ffffff; border: 1.5px solid #3b82f6; border-radius: 6px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-height: 220px; overflow-y: auto; margin-top: 4px;"></div>
+                                <div id="place-selected-info" style="font-size: 11px; color: #475569; margin-top: 6px; display: none; line-height: 1.4; background: #e0f2fe; padding: 6px 10px; border-radius: 4px; border: 1px solid #bae6fd;"></div>
+                                <p style="font-size: 11px; color: #64748b; margin-top: 5px; margin-bottom: 0;">
+                                    Type a place and click <strong>Find</strong> (or pick from dropdown) to automatically set Latitude & Longitude below.
+                                </p>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="zoom">Zoom:</label>
+                                <input type="number" id="zoom" name="zoom" value="{{.Zoom}}">
+                            </div>
+                            <div class="form-group">
+                                <label for="latitude">Latitude:</label>
+                                <input type="number" step="0.000000000000001" id="latitude" name="latitude" value="{{.Lat}}">
+                            </div>
+                            <div class="form-group">
+                                <label for="longitude">Longitude:</label>
+                                <input type="number" step="0.000000000000001" id="longitude" name="longitude" value="{{.Lon}}">
+                            </div>
+                        </fieldset>
+                    </details>
+                    
+                    <details class="expandable-section">
+                        <summary>Advanced Options</summary>
+                        <fieldset>
+                            <div class="form-group">
+                                <label for="fastmode">Fast Mode (BETA):</label>
+                                <input type="checkbox" id="fastmode" name="fastmode" {{if .FastMode}}checked{{end}}>
+                            </div>
+                            <div class="form-group">
+                                    <label for="radius">Radius (BETA):</label>
+                                    <input type="number" id="radius" name="radius" value="{{.Radius}}">
+                            </div>
+                            <div class="form-group">
+                                <label for="depth">Depth:</label>
+                                <input type="number" step="1" id="depth" name="depth" value="{{.Depth}}">
+                            </div>
+                            <div class="form-group">
+                                <label for="maxtime">Max job time:</label>
+                                <input type="text" id="maxtime" name="maxtime" value="{{.MaxTime}}">
+                            </div>
+                        </fieldset>
+                    </details>
+                    
+                    <details class="expandable-section" id="crm-sync-section">
+                        <summary>CRM Integration (Vercel)</summary>
+                        <fieldset>
+                            <div class="form-group">
+                                <label for="crm_url">CRM Webhook or Base URL:</label>
+                                <input type="text" id="crm_url" oninput="handleCrmUrlChange()" placeholder="e.g. https://your-crm.vercel.app or ingest webhook URL">
+                            </div>
+                            <div class="form-group">
+                                <label for="crm_slug">Company Slug:</label>
+                                <input type="text" id="crm_slug" placeholder="e.g. softsphere">
+                            </div>
+                            <div class="form-group">
+                                <label for="crm_api_key">Scraper API Key:</label>
+                                <input type="password" id="crm_api_key" placeholder="sc_live_...">
+                            </div>
+                            <div class="form-group checkbox" style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="crm_auto_sync" checked>
+                                <label for="crm_auto_sync" style="font-weight: 500; font-size: 12px; cursor: pointer;">Auto-sync finished jobs</label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+                                <button type="button" onclick="saveCrmSettings(true)" style="background: #1e293b; color: white; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; border: none;">Save Config</button>
+                                <span id="crm-save-status" style="font-size: 11px; color: #10b981; display: none;">Saved!</span>
+                            </div>
+                        </fieldset>
+                    </details>
+                    
+                    <button type="submit">Start Scraping</button>
+                </form>
+            </div>
+            <div class="content">
+                <div id="spinner" class="spinner"></div>
+                <div class="table-responsive">
+                    <table id="job-table">
+                        <thead>
+                            <tr>
+                                <th>Job ID</th>
+                                <th>Job Name</th>
+                                <th>Job Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="job-tbody" hx-get="/jobs" hx-trigger="load" hx-swap="outerHTML">
+                            <!-- Job rows will be inserted here by HTMX -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="pagination-container"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="map-modal-container"></div>
+
+    <script>
+    function getCrmConfig() {
+        return {
+            url: localStorage.getItem('crm_url') || '',
+            slug: localStorage.getItem('crm_slug') || '',
+            apiKey: localStorage.getItem('crm_api_key') || '',
+            autoSync: localStorage.getItem('crm_auto_sync') !== 'false'
+        };
+    }
+
+    function loadCrmSettings() {
+        const cfg = getCrmConfig();
+        const urlEl = document.getElementById('crm_url');
+        const slugEl = document.getElementById('crm_slug');
+        const keyEl = document.getElementById('crm_api_key');
+        const autoEl = document.getElementById('crm_auto_sync');
+        if (urlEl) urlEl.value = cfg.url;
+        if (slugEl) slugEl.value = cfg.slug;
+        if (keyEl) keyEl.value = cfg.apiKey;
+        if (autoEl) autoEl.checked = cfg.autoSync;
+    }
+
+    function saveCrmSettings(showFeedback) {
+        const url = document.getElementById('crm_url').value.trim();
+        const slug = document.getElementById('crm_slug').value.trim();
+        const apiKey = document.getElementById('crm_api_key').value.trim();
+        const autoSync = document.getElementById('crm_auto_sync').checked;
+
+        localStorage.setItem('crm_url', url);
+        localStorage.setItem('crm_slug', slug);
+        localStorage.setItem('crm_api_key', apiKey);
+        localStorage.setItem('crm_auto_sync', autoSync ? 'true' : 'false');
+
+        if (showFeedback) {
+            const statusEl = document.getElementById('crm-save-status');
+            if (statusEl) {
+                statusEl.style.display = 'inline';
+                setTimeout(() => { statusEl.style.display = 'none'; }, 2500);
+            }
+        }
+    }
+
+    function handleCrmUrlChange() {
+        const urlInput = document.getElementById('crm_url');
+        const slugInput = document.getElementById('crm_slug');
+        if (!urlInput) return;
+        const val = urlInput.value.trim();
+        // If user pasted full endpoint e.g. https://domain.com/api/softsphere/leads/ingest
+        const match = val.match(/\/api\/([^\/]+)\/leads/);
+        if (match && match[1] && slugInput && !slugInput.value) {
+            slugInput.value = match[1];
+        }
+    }
+
+    async function syncJobToCrm(jobId, btn) {
+        saveCrmSettings(false);
+        const cfg = getCrmConfig();
+
+        if (!cfg.url || !cfg.apiKey) {
+            const crmSection = document.getElementById('crm-sync-section');
+            if (crmSection) crmSection.open = true;
+            alert('Please configure your CRM Webhook / Base URL and Scraper API Key in the "CRM Integration" section first.');
+            return;
+        }
+
+        const origText = btn ? btn.innerText : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerText = 'Syncing...';
+        }
+
+        try {
+            const res = await fetch('/jobs/sync-crm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: jobId,
+                    crm_url: cfg.url,
+                    company_slug: cfg.slug,
+                    api_key: cfg.apiKey
+                })
+            });
+
+            const text = await res.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (parseErr) {
+                throw new Error(`CRM returned unexpected response (HTTP ${res.status}): ${text.substring(0, 150)}`);
+            }
+
+            if (!res.ok) {
+                throw new Error(data.error || `HTTP ${res.status} error from CRM`);
+            }
+
+            const summary = data.summary || {};
+            const msg = `Synced! (${summary.created || 0} new, ${summary.updated || 0} updated, ${summary.totalReceived || 0} total leads)`;
+            if (btn) {
+                btn.innerText = 'Synced ✓';
+                btn.style.backgroundColor = '#10b981';
+                btn.title = msg;
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerText = origText;
+                    btn.style.backgroundColor = '';
+                }, 5000);
+            }
+            alert(`Success: ${msg}`);
+        } catch (err) {
+            alert(`CRM Sync Error: ${err.message}`);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerText = origText;
+            }
+        }
+    }
+
+    // Google Places Autocomplete & Geocoding Integration
+    const GOOGLE_API_KEY = "AIzaSyDNe1Kfvz9anSukuwFpTriZM04ySWEXteE";
+    let placeAutocompleteInstance = null;
+
+    function initPlaceAutocomplete() {
+        const input = document.getElementById('place_search');
+        if (!input) return;
+
+        if (window.google && window.google.maps && window.google.maps.places) {
+            placeAutocompleteInstance = new google.maps.places.Autocomplete(input, {
+                fields: ["formatted_address", "geometry", "name", "address_components"]
+            });
+
+            placeAutocompleteInstance.addListener('place_changed', function() {
+                const place = placeAutocompleteInstance.getPlace();
+                if (!place || !place.geometry || !place.geometry.location) {
+                    manualGeocode();
+                    return;
+                }
+
+                applyCoordinates(
+                    place.geometry.location.lat(), 
+                    place.geometry.location.lng(), 
+                    place.formatted_address || place.name
+                );
+            });
+        }
+
+        // Prevent pressing enter inside search input from prematurely submitting the scrape form
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                manualGeocode();
+            }
+        });
+    }
+
+    async function manualGeocode(inputVal) {
+        const input = document.getElementById('place_search');
+        const query = (inputVal !== undefined ? inputVal : (input ? input.value : '')).trim();
+        if (!query) {
+            alert('Please type a city, area, or landmark to search.');
+            return;
+        }
+
+        const btn = document.getElementById('btn-geocode');
+        const dropdown = document.getElementById('place-dropdown-results');
+        const origText = btn ? btn.innerText : 'Find';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerText = 'Finding...';
+        }
+
+        try {
+            // Query local Go server proxy to avoid browser CSP/CORS issues
+            const res = await fetch(`/api/places/find?q=${encodeURIComponent(query)}`);
+            const data = await res.json();
+            if (data.status === 'OK' && data.results && data.results.length > 0) {
+                if (data.results.length === 1 && inputVal === undefined) {
+                    const loc = data.results[0].geometry.location;
+                    applyCoordinates(loc.lat, loc.lng, data.results[0].formatted_address);
+                    if (dropdown) dropdown.style.display = 'none';
+                } else {
+                    renderPlaceDropdown(data.results);
+                }
+            } else {
+                if (inputVal === undefined) {
+                    alert(`Location "${query}" not found. Please try searching for a city, area, or country.`);
+                }
+                if (dropdown) dropdown.style.display = 'none';
+            }
+        } catch (err) {
+            console.error('Geocoding error:', err);
+            if (inputVal === undefined) {
+                alert('Failed to lookup place: ' + err.message);
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerText = origText;
+            }
+        }
+    }
+
+    function renderPlaceDropdown(results) {
+        const dropdown = document.getElementById('place-dropdown-results');
+        if (!dropdown) return;
+        dropdown.innerHTML = '';
+
+        results.slice(0, 8).forEach((item) => {
+            const row = document.createElement('div');
+            row.style.padding = '9px 12px';
+            row.style.fontSize = '12px';
+            row.style.cursor = 'pointer';
+            row.style.borderBottom = '1px solid #f1f5f9';
+            row.style.display = 'flex';
+            row.style.alignItems = 'center';
+            row.style.gap = '8px';
+            row.style.color = '#1e293b';
+            row.innerHTML = `<span style="font-size: 14px;">📍</span> <span>${item.formatted_address}</span>`;
+
+            row.onmouseover = () => { row.style.backgroundColor = '#eff6ff'; };
+            row.onmouseout = () => { row.style.backgroundColor = '#ffffff'; };
+            row.onclick = () => {
+                const loc = item.geometry.location;
+                applyCoordinates(loc.lat, loc.lng, item.formatted_address);
+                dropdown.style.display = 'none';
+                const input = document.getElementById('place_search');
+                if (input) input.value = item.formatted_address;
+            };
+            dropdown.appendChild(row);
+        });
+
+        dropdown.style.display = 'block';
+    }
+
+    // Close dropdown on click outside
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('place-dropdown-results');
+        const input = document.getElementById('place_search');
+        const btn = document.getElementById('btn-geocode');
+        if (dropdown && !dropdown.contains(e.target) && e.target !== input && e.target !== btn) {
+            dropdown.style.display = 'none';
+        }
+    });
+
+    function applyCoordinates(lat, lng, address) {
+        const latInput = document.getElementById('latitude');
+        const lonInput = document.getElementById('longitude');
+        const zoomInput = document.getElementById('zoom');
+        const statusEl = document.getElementById('geo-status');
+        const infoEl = document.getElementById('place-selected-info');
+
+        const latNum = parseFloat(lat);
+        const lngNum = parseFloat(lng);
+
+        if (latInput) latInput.value = latNum.toFixed(7);
+        if (lonInput) lonInput.value = lngNum.toFixed(7);
+        if (zoomInput && (!zoomInput.value || parseFloat(zoomInput.value) <= 1)) {
+            zoomInput.value = 14;
+        }
+
+        const details = document.getElementById('location-settings-section');
+        if (details) details.open = true;
+
+        if (statusEl) {
+            statusEl.innerText = '✓ Coordinates Auto-filled';
+            statusEl.style.display = 'inline';
+            setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
+        }
+
+        if (infoEl && address) {
+            infoEl.innerHTML = `📍 <strong>Selected:</strong> ${address}<br><span style="color:#0284c7; font-family: monospace;">Lat: ${latNum.toFixed(6)}, Lon: ${lngNum.toFixed(6)}</span>`;
+            infoEl.style.display = 'block';
+        }
+    }
+
+    window.initPlaceAutocomplete = initPlaceAutocomplete;
+
+    let searchTimer = null;
+    document.addEventListener('DOMContentLoaded', () => {
+        loadCrmSettings();
+        if (window.google && window.google.maps && window.google.maps.places) {
+            initPlaceAutocomplete();
+        }
+
+        const input = document.getElementById('place_search');
+        if (input) {
+            input.addEventListener('input', (e) => {
+                clearTimeout(searchTimer);
+                const val = e.target.value.trim();
+                if (val.length < 3) {
+                    const dropdown = document.getElementById('place-dropdown-results');
+                    if (dropdown) dropdown.style.display = 'none';
+                    return;
+                }
+                searchTimer = setTimeout(() => {
+                    manualGeocode(val);
+                }, 500);
+            });
+        }
+    });
+    </script>
+</body>
+</html>
