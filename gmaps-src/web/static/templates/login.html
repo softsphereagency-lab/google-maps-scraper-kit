@@ -157,23 +157,6 @@
             cursor: not-allowed;
         }
 
-        .advanced-toggle {
-            margin-top: 14px;
-            font-size: 11px;
-            color: #64748b;
-        }
-
-        .advanced-toggle summary {
-            cursor: pointer;
-            user-select: none;
-            font-weight: 500;
-            color: #475569;
-        }
-
-        .advanced-toggle summary:hover {
-            color: #2563eb;
-        }
-
         .login-footer {
             padding: 14px 24px;
             background: #f8fafc;
@@ -264,25 +247,7 @@
                     >
                 </div>
 
-                <details class="advanced-toggle">
-                    <summary>Custom CRM URL (Optional)</summary>
-                    <div style="margin-top: 8px;">
-                        <input 
-                            type="url" 
-                            id="crm_url_input" 
-                            name="crm_url_input" 
-                            placeholder="https://softsphere-agency-crm.vercel.app" 
-                            value="{{.DefaultCrmUrl}}" 
-                            class="login-input"
-                            style="font-size: 12px; height: 38px;"
-                        >
-                        <span style="display:block; margin-top:4px; font-size:10px; color:#94a3b8;">
-                            Leave default to connect to your live Vercel CRM.
-                        </span>
-                    </div>
-                </details>
-
-                <div style="margin-top: 20px;">
+                <div style="margin-top: 24px;">
                     <button type="submit" id="submit-btn" class="login-btn">
                         <span id="btn-text">Sign In & Unlock Scraper</span>
                         <div id="btn-spinner" class="btn-spinner"></div>
@@ -312,13 +277,12 @@
 
         const email = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value;
-        const customCrmUrl = document.getElementById('crm_url_input').value.trim();
 
         try {
             const res = await fetch('/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password, crmUrl: customCrmUrl })
+                body: JSON.stringify({ email, password })
             });
 
             const data = await res.json();
