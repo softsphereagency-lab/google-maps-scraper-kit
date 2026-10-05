@@ -625,6 +625,12 @@ func (s *Server) syncCRM(w http.ResponseWriter, r *http.Request) {
 	}
 
 	crmURL := strings.TrimSpace(req.CRMURL)
+	if crmURL == "" {
+		crmURL = os.Getenv("CRM_BASE_URL")
+	}
+	if strings.Contains(crmURL, "softsphere-agency-crm.vercel.app") && !strings.Contains(crmURL, "softsphere-agency-crm-ten.vercel.app") {
+		crmURL = strings.Replace(crmURL, "softsphere-agency-crm.vercel.app", "softsphere-agency-crm-ten.vercel.app", -1)
+	}
 	crmURL = strings.TrimRight(crmURL, "/")
 	slug := strings.TrimSpace(req.CompanySlug)
 	apiKey := strings.TrimSpace(req.APIKey)
@@ -1055,6 +1061,33 @@ type crmLoginResponse struct {
 	SessionToken  string `json:"sessionToken"`
 }
 
+func resolveCRMURL(raw string) string {
+	val := strings.TrimSpace(raw)
+	if val == "" {
+		val = os.Getenv("CRM_BASE_URL")
+	}
+	val = strings.TrimSpace(val)
+	if val == "" {
+		val = "https://softsphere-agency-crm-ten.vercel.app"
+	}
+	// Automatically rectify if missing '-ten' in Vercel domain
+	if strings.Contains(val, "softsphere-agency-crm.vercel.app") && !strings.Contains(val, "softsphere-agency-crm-ten.vercel.app") {
+		val = strings.Replace(val, "softsphere-agency-crm.vercel.app", "softsphere-agency-crm-ten.vercel.app", -1)
+	}
+	if !strings.HasPrefix(val, "http://") && !strings.HasPrefix(val, "https://") {
+		val = "https://" + val
+	}
+	// Parse as URL to keep only scheme://host, preventing accidental sub-paths
+	if parsed, err := url.Parse(val); err == nil && parsed.Host != "" {
+		scheme := parsed.Scheme
+		if scheme == "" {
+			scheme = "https"
+		}
+		return fmt.Sprintf("%s://%s", scheme, parsed.Host)
+	}
+	return strings.TrimRight(val, "/")
+}
+
 func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		if cookie, err := r.Cookie("gmaps_session"); err == nil && cookie.Value != "" {
@@ -1068,10 +1101,7 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		defaultCRM := os.Getenv("CRM_BASE_URL")
-		if defaultCRM == "" {
-			defaultCRM = "https://softsphere-agency-crm-ten.vercel.app"
-		}
+		defaultCRM := resolveCRMURL("")
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = tmpl.Execute(w, struct {
@@ -1096,15 +1126,7 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		targetCRM := strings.TrimSpace(req.CRMURL)
-		if targetCRM == "" {
-			targetCRM = os.Getenv("CRM_BASE_URL")
-		}
-		if targetCRM == "" {
-			targetCRM = "https://softsphere-agency-crm-ten.vercel.app"
-		}
-		targetCRM = strings.TrimRight(targetCRM, "/")
-
+		targetCRM := resolveCRMURL(req.CRMURL)
 		crmEndpoint := targetCRM + "/api/auth/scraper-login"
 		payloadBytes, _ := json.Marshal(map[string]string{
 			"email":    req.Email,
@@ -1121,7 +1143,9 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 		resp, err := client.Do(crmReq)
 		if err != nil {
-			renderJSON(w, http.StatusBadGateway, map[string]string{"error": "Could not connect to CRM at " + targetCRM + ". Check network/URL."})
+			renderJSON(w, http.StatusBadGateway, map[string]string{
+				"error": fmt.Sprintf("Could not connect to CRM (%s): %v", crmEndpoint, err),
+			})
 			return
 		}
 		defer resp.Body.Close()
@@ -1134,8 +1158,16 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 		var crmResp crmLoginResponse
 		if err := json.Unmarshal(respBytes, &crmResp); err != nil {
-			log.Printf("[CRM Auth Error] status %d, response: %s", resp.StatusCode, string(respBytes))
-			renderJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("CRM connection error (%d)", resp.StatusCode)})
+			log.Printf("[CRM Auth Error] status %d, endpoint %s, response: %s", resp.StatusCode, crmEndpoint, string(respBytes))
+			var cleanBody string
+			if len(respBytes) > 120 {
+				cleanBody = string(respBytes[:120]) + "..."
+			} else {
+				cleanBody = string(respBytes)
+			}
+			renderJSON(w, http.StatusBadGateway, map[string]string{
+				"error": fmt.Sprintf("CRM connection error (%d) from %s: %s", resp.StatusCode, crmEndpoint, cleanBody),
+			})
 			return
 		}
 
