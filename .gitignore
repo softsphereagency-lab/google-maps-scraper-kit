@@ -13,6 +13,11 @@ data/
 __pycache__/
 *.pyc
 
+# Binaries
+*.exe
+google-maps-scraper
+test-*
+
 # OS / editor noise
 .DS_Store
 Thumbs.db

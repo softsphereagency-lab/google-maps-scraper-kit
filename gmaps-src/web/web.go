@@ -79,6 +79,8 @@ func New(svc *Service, addr string) (*Server, error) {
 
 		ans.exportJSON(w, r)
 	})
+	mux.HandleFunc("/login", ans.loginHandler)
+	mux.HandleFunc("/logout", ans.logoutHandler)
 	mux.HandleFunc("/view", func(w http.ResponseWriter, r *http.Request) {
 		r = requestWithID(r)
 
@@ -139,11 +141,12 @@ func New(svc *Service, addr string) (*Server, error) {
 		ans.download(w, r)
 	})
 
-	handler := securityHeaders(mux)
+	handler := securityHeaders(ans.authMiddleware(mux))
 	ans.srv.Handler = handler
 
 	tmplsKeys := []string{
 		"static/templates/index.html",
+		"static/templates/login.html",
 		"static/templates/job_rows.html",
 		"static/templates/job_row.html",
 		"static/templates/job_view.html",
@@ -997,3 +1000,185 @@ func securityHeaders(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+func (s *Server) authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		// Public endpoints that don't require session cookie
+		if path == "/login" || path == "/logout" ||
+			strings.HasPrefix(path, "/static/") ||
+			strings.HasPrefix(path, "/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Check session cookie
+		cookie, err := r.Cookie("gmaps_session")
+		if err != nil || cookie.Value == "" {
+			// If HTMX AJAX request, trigger client-side redirect to /login
+			if r.Header.Get("HX-Request") != "" {
+				w.Header().Set("HX-Redirect", "/login")
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+type loginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	CRMURL   string `json:"crmUrl"`
+}
+
+type crmLoginResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+	Company *struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Slug string `json:"slug"`
+	} `json:"company"`
+	User *struct {
+		ID           string `json:"id"`
+		Email        string `json:"email"`
+		Name         string `json:"name"`
+		IsSuperAdmin bool   `json:"isSuperAdmin"`
+		Role         string `json:"role"`
+	} `json:"user"`
+	ScraperAPIKey string `json:"scraperApiKey"`
+	SessionToken  string `json:"sessionToken"`
+}
+
+func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		if cookie, err := r.Cookie("gmaps_session"); err == nil && cookie.Value != "" {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+
+		tmpl, ok := s.tmpl["static/templates/login.html"]
+		if !ok {
+			http.Error(w, "login template not found", http.StatusInternalServerError)
+			return
+		}
+
+		defaultCRM := os.Getenv("CRM_BASE_URL")
+		if defaultCRM == "" {
+			defaultCRM = "https://softsphere-agency-crm.vercel.app"
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = tmpl.Execute(w, struct {
+			DefaultCrmUrl string
+		}{
+			DefaultCrmUrl: defaultCRM,
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var req loginRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			renderJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+			return
+		}
+
+		req.Email = strings.TrimSpace(req.Email)
+		req.Password = strings.TrimSpace(req.Password)
+		if req.Email == "" || req.Password == "" {
+			renderJSON(w, http.StatusBadRequest, map[string]string{"error": "Email and password are required"})
+			return
+		}
+
+		targetCRM := strings.TrimSpace(req.CRMURL)
+		if targetCRM == "" {
+			targetCRM = os.Getenv("CRM_BASE_URL")
+		}
+		if targetCRM == "" {
+			targetCRM = "https://softsphere-agency-crm.vercel.app"
+		}
+		targetCRM = strings.TrimRight(targetCRM, "/")
+
+		crmEndpoint := targetCRM + "/api/auth/scraper-login"
+		payloadBytes, _ := json.Marshal(map[string]string{
+			"email":    req.Email,
+			"password": req.Password,
+		})
+
+		client := &http.Client{Timeout: 15 * time.Second}
+		crmReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, crmEndpoint, bytes.NewBuffer(payloadBytes))
+		if err != nil {
+			renderJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to create CRM request"})
+			return
+		}
+		crmReq.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(crmReq)
+		if err != nil {
+			renderJSON(w, http.StatusBadGateway, map[string]string{"error": "Could not connect to CRM at " + targetCRM + ". Check network/URL."})
+			return
+		}
+		defer resp.Body.Close()
+
+		var crmResp crmLoginResponse
+		if err := json.NewDecoder(resp.Body).Decode(&crmResp); err != nil {
+			renderJSON(w, http.StatusBadGateway, map[string]string{"error": "CRM returned invalid response"})
+			return
+		}
+
+		if resp.StatusCode != http.StatusOK || !crmResp.Success {
+			errMsg := crmResp.Error
+			if errMsg == "" {
+				errMsg = "Invalid email or password."
+			}
+			renderJSON(w, http.StatusUnauthorized, map[string]string{"error": errMsg})
+			return
+		}
+
+		// Set 30-day session cookie
+		sessionVal := fmt.Sprintf("%s|%d", req.Email, time.Now().Unix())
+		http.SetCookie(w, &http.Cookie{
+			Name:     "gmaps_session",
+			Value:    sessionVal,
+			Path:     "/",
+			MaxAge:   30 * 24 * 3600,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+
+		compSlug := ""
+		if crmResp.Company != nil {
+			compSlug = crmResp.Company.Slug
+		}
+
+		renderJSON(w, http.StatusOK, map[string]any{
+			"success":       true,
+			"crmUrl":        targetCRM,
+			"companySlug":   compSlug,
+			"scraperApiKey": crmResp.ScraperAPIKey,
+			"user":          crmResp.User,
+		})
+		return
+	}
+
+	http.Error(w, methodNotAllowedMessage, http.StatusMethodNotAllowed)
+}
+
+func (s *Server) logoutHandler(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "gmaps_session",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+

@@ -97,9 +97,17 @@
                     </svg>
                     <h1>Google Maps Scraper</h1>
                 </div>
-                <div class="header-badge">
-                    <span class="status-dot"></span>
-                    <span>Ready</span>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <div id="header-user-pill" class="header-badge" style="background: #f1f5f9; color: #334155; border-color: #cbd5e1; display: none;">
+                        <span id="header-user-email">User</span>
+                    </div>
+                    <div class="header-badge">
+                        <span class="status-dot"></span>
+                        <span>Ready</span>
+                    </div>
+                    <a href="/logout" style="text-decoration: none; font-size: 11px; font-weight: 600; color: #dc2626; background: #fee2e2; padding: 4px 10px; border-radius: 9999px; display: inline-flex; align-items: center; gap: 4px;" title="Sign out of scraper">
+                        Sign Out
+                    </a>
                 </div>
             </div>
 
@@ -275,6 +283,14 @@
         if (slugEl) slugEl.value = cfg.slug;
         if (keyEl) keyEl.value = cfg.apiKey;
         if (autoEl) autoEl.checked = cfg.autoSync;
+
+        const userEmail = localStorage.getItem('crm_user_email');
+        const pill = document.getElementById('header-user-pill');
+        const emailEl = document.getElementById('header-user-email');
+        if (userEmail && pill && emailEl) {
+            emailEl.textContent = userEmail;
+            pill.style.display = 'inline-flex';
+        }
     }
 
     function saveCrmSettings(showFeedback) {

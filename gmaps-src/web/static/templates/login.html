@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>Sign In - Google Maps Scraper</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <style>
+        body {
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #020617 100%);
+            padding: 16px;
+            box-sizing: border-box;
+            color: #0f172a;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 420px;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .login-header {
+            padding: 28px 24px 20px;
+            text-align: center;
+            border-bottom: 1px solid #f1f5f9;
+            background: #fafafa;
+        }
+
+        .login-logo {
+            width: 52px;
+            height: 52px;
+            margin: 0 auto 12px;
+            background: #2563eb;
+            color: #ffffff;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
+        }
+
+        .login-header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0 0 4px;
+            letter-spacing: -0.01em;
+        }
+
+        .login-header p {
+            font-size: 0.8125rem;
+            color: #64748b;
+            margin: 0;
+        }
+
+        .badge-crm {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 10px;
+            padding: 3px 10px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 600;
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+        }
+
+        .login-body {
+            padding: 24px;
+        }
+
+        .login-error {
+            display: none;
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 0.8125rem;
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+
+        .login-form-group {
+            margin-bottom: 16px;
+        }
+
+        .login-form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .login-input {
+            width: 100%;
+            height: 44px;
+            padding: 10px 14px;
+            font-size: 15px;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 8px;
+            outline: none;
+            box-sizing: border-box;
+            background: #ffffff;
+            color: #0f172a;
+            transition: all 0.2s;
+        }
+
+        .login-input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .login-btn {
+            width: 100%;
+            height: 46px;
+            min-height: 46px;
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, transform 0.05s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.25);
+            touch-action: manipulation;
+        }
+
+        .login-btn:hover {
+            background: #1d4ed8;
+        }
+
+        .login-btn:active {
+            transform: translateY(1px);
+        }
+
+        .login-btn:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+
+        .advanced-toggle {
+            margin-top: 14px;
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .advanced-toggle summary {
+            cursor: pointer;
+            user-select: none;
+            font-weight: 500;
+            color: #475569;
+        }
+
+        .advanced-toggle summary:hover {
+            color: #2563eb;
+        }
+
+        .login-footer {
+            padding: 14px 24px;
+            background: #f8fafc;
+            border-top: 1px solid #f1f5f9;
+            text-align: center;
+            font-size: 11px;
+            color: #94a3b8;
+        }
+
+        .btn-spinner {
+            display: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #ffffff;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 480px) {
+            .login-card {
+                border-radius: 12px;
+            }
+            .login-header {
+                padding: 22px 18px 16px;
+            }
+            .login-body {
+                padding: 18px;
+            }
+            .login-input {
+                font-size: 16px !important; /* Prevents iOS auto-zoom */
+                height: 46px;
+            }
+            .login-btn {
+                height: 48px;
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-header">
+            <div class="login-logo">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+            </div>
+            <h1>Google Maps Scraper</h1>
+            <p>Sign in using your Agency CRM credentials</p>
+            <div class="badge-crm">
+                <span>🛡️ Single Sign-On via SoftSphere CRM</span>
+            </div>
+        </div>
+
+        <div class="login-body">
+            <div id="login-error-msg" class="login-error"></div>
+
+            <form id="login-form" onsubmit="handleScraperLogin(event)">
+                <div class="login-form-group">
+                    <label for="email">CRM Email Address</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        required 
+                        autocomplete="email" 
+                        placeholder="you@company.com" 
+                        class="login-input"
+                    >
+                </div>
+
+                <div class="login-form-group">
+                    <label for="password">CRM Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        required 
+                        autocomplete="current-password" 
+                        placeholder="••••••••••••" 
+                        class="login-input"
+                    >
+                </div>
+
+                <details class="advanced-toggle">
+                    <summary>Custom CRM URL (Optional)</summary>
+                    <div style="margin-top: 8px;">
+                        <input 
+                            type="url" 
+                            id="crm_url_input" 
+                            name="crm_url_input" 
+                            placeholder="https://softsphere-agency-crm.vercel.app" 
+                            value="{{.DefaultCrmUrl}}" 
+                            class="login-input"
+                            style="font-size: 12px; height: 38px;"
+                        >
+                        <span style="display:block; margin-top:4px; font-size:10px; color:#94a3b8;">
+                            Leave default to connect to your live Vercel CRM.
+                        </span>
+                    </div>
+                </details>
+
+                <div style="margin-top: 20px;">
+                    <button type="submit" id="submit-btn" class="login-btn">
+                        <span id="btn-text">Sign In & Unlock Scraper</span>
+                        <div id="btn-spinner" class="btn-spinner"></div>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="login-footer">
+            Any registered CRM user (Owner, Admin, or Member) can sign in.
+        </div>
+    </div>
+
+    <script>
+    async function handleScraperLogin(e) {
+        e.preventDefault();
+        const errorBox = document.getElementById('login-error-msg');
+        const submitBtn = document.getElementById('submit-btn');
+        const btnText = document.getElementById('btn-text');
+        const btnSpinner = document.getElementById('btn-spinner');
+
+        errorBox.style.display = 'none';
+        errorBox.textContent = '';
+        submitBtn.disabled = true;
+        btnText.textContent = 'Verifying credentials...';
+        btnSpinner.style.display = 'inline-block';
+
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        const customCrmUrl = document.getElementById('crm_url_input').value.trim();
+
+        try {
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password, crmUrl: customCrmUrl })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Invalid credentials or connection error.');
+            }
+
+            // Auto-configure CRM integration into browser localStorage so leads sync seamlessly
+            if (data.crmUrl) {
+                localStorage.setItem('crm_url', data.crmUrl);
+            }
+            if (data.companySlug) {
+                localStorage.setItem('crm_slug', data.companySlug);
+            }
+            if (data.scraperApiKey) {
+                localStorage.setItem('crm_api_key', data.scraperApiKey);
+            }
+            localStorage.setItem('crm_auto_sync', 'true');
+            if (data.user) {
+                localStorage.setItem('crm_user_name', data.user.name || data.user.email);
+                localStorage.setItem('crm_user_email', data.user.email);
+                localStorage.setItem('crm_user_role', data.user.role || '');
+            }
+
+            // Redirect to dashboard
+            window.location.href = '/';
+        } catch (err) {
+            errorBox.textContent = err.message || 'Login failed. Please check your credentials and try again.';
+            errorBox.style.display = 'block';
+            submitBtn.disabled = false;
+            btnText.textContent = 'Sign In & Unlock Scraper';
+            btnSpinner.style.display = 'none';
+        }
+    }
+    </script>
+</body>
+</html>
