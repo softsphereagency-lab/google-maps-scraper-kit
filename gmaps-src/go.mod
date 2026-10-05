@@ -339,9 +339,4 @@ require (
 	mvdan.cc/unparam v0.0.0-20260823230713-2fa3d841b0c8 // indirect
 )
 
-tool (
-	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-	golang.org/x/vuln/cmd/govulncheck
-)
-
 replace github.com/gosom/scrapemate => ../scrapemate-fixed
